@@ -4,7 +4,7 @@ import torch
 import torchaudio
 import torchvision
 
-from LipModel_MFM.datamodule.hand_util import load_hand_recog
+from .hand_util import load_hand_recog
 
 
 def cut_or_pad(data, size, dim=0):
@@ -48,12 +48,14 @@ class AVDataset_CCS(torch.utils.data.Dataset):
             audio_transform,
             video_transform,
             rate_ratio=640,
+            include_hand=False,
     ):
 
         self.root_dir = root_dir
 
         self.modality = modality
         self.rate_ratio = rate_ratio
+        self.include_hand = include_hand
 
         self.list = self.load_list(label_path)
 
@@ -63,8 +65,17 @@ class AVDataset_CCS(torch.utils.data.Dataset):
     def load_list(self, label_path):
         paths_counts_labels = []
         for path_count_label in open(label_path).read().splitlines():
-            dataset_name, rel_path, input_length, token_id, hand_recog_path, hand_position_path = path_count_label.split(
-                ",")
+            fields = path_count_label.split(",")
+            if len(fields) == 4:
+                dataset_name, rel_path, input_length, token_id = fields
+                hand_recog_path = hand_position_path = None
+            elif len(fields) == 6:
+                dataset_name, rel_path, input_length, token_id, hand_recog_path, hand_position_path = fields
+            else:
+                raise ValueError(
+                    "Each label row must contain 4 fields (lip training) or "
+                    f"6 fields (hand-prompt evaluation), got {len(fields)}"
+                )
             paths_counts_labels.append(
                 (
                     dataset_name,
@@ -82,13 +93,23 @@ class AVDataset_CCS(torch.utils.data.Dataset):
         path = os.path.join(self.root_dir, dataset_name, rel_path)
         if os.path.exists(path) is False:
             raise FileNotFoundError(f"{path} does not exist.")
-        if os.path.exists(hand_recog_path) is False:
-            raise FileNotFoundError(f"{hand_recog_path} does not exist.")
         if self.modality == "video":
             video = load_video(path)
             video = self.video_transform(video)
-            hand_recog_matrix = load_hand_recog(hand_recog_path, hand_position_path, input_length)
-            return {"input": video, "target": token_id, "hand_matrix": hand_recog_matrix}
+            sample = {"input": video, "target": token_id}
+            if self.include_hand:
+                if not hand_recog_path or not hand_position_path:
+                    raise ValueError(
+                        "Hand-prompt evaluation requires 6-field label rows"
+                    )
+                if not os.path.exists(hand_recog_path):
+                    raise FileNotFoundError(f"{hand_recog_path} does not exist.")
+                if not os.path.exists(hand_position_path):
+                    raise FileNotFoundError(f"{hand_position_path} does not exist.")
+                sample["hand_matrix"] = load_hand_recog(
+                    hand_recog_path, hand_position_path, input_length
+                )
+            return sample
         elif self.modality == "audio":
             audio = load_audio(path)
             audio = self.audio_transform(audio)

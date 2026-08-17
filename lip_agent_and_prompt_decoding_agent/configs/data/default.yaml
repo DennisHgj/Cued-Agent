@@ -1,7 +1,9 @@
 defaults:
   - _self_
-  - dataset: CCS_multi_hand
+  - dataset: CCS_multi_6H_hand
 modality: video
+include_hand: false
+num_workers: 4
 use_audio_normalise: False
 max_frames: 1800
 max_frames_val: 1000

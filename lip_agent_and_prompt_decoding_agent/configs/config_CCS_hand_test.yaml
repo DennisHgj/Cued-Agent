@@ -11,14 +11,13 @@ hydra:
   output_subdir: null  
   run:  
     dir: .
-exp_dir: /data/guanjie/CuedSpeech/exp
-exp_name: lip_hand_6H_multi_0128
+exp_dir: ./exp
+exp_name: lip_decoder
 gpus: 1
 slurm_job_id:
 file_path:
-ckpt_path: epoch=5-loss_val=8.358474731445312.ckpt
-pretrained_model_path:
-transfer_frontend:
-transfer_encoder:
+ckpt_path: null
+pretrained_model_path: null
+transfer_frontend: false
+transfer_encoder: false
 num-nodes: 1
-

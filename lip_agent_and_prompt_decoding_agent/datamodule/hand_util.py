@@ -68,7 +68,7 @@ def group_elements2(lst):
     current_group = [lst[0]]
 
     for i in range(1, len(lst)):
-        if lst[i] - lst[i - 1] < 2:
+        if lst[i] - lst[i - 1] <= 2:
             current_group.append(lst[i])
         else:
             result.append(current_group[:])
@@ -115,7 +115,9 @@ def load_hand_recog(hand_recog_path, hand_position_path, frame_num):
     
     for i in range(len(key_frames)):
         hand_position = hand_results[i]['hand_position']
-        hand_gesture = hand_results[i]['hand_gesture']
+        hand_gesture = hand_results[i].get('hand_shape', hand_results[i].get('hand_gesture'))
+        if hand_gesture is None:
+            raise KeyError("hand result must contain hand_shape or hand_gesture")
         vowel_options, consonant_options = label2phone(hand_position, hand_gesture)
         for vowel in vowel_options:
             vowel_index = hashmap[vowel]
@@ -129,7 +131,9 @@ def load_hand_recog(hand_recog_path, hand_position_path, frame_num):
     """
     for i in range(len(key_frames)):
         hand_position = hand_results[i]['hand_position']
-        hand_gesture = hand_results[i]['hand_gesture']
+        hand_gesture = hand_results[i].get('hand_shape', hand_results[i].get('hand_gesture'))
+        if hand_gesture is None:
+            raise KeyError("hand result must contain hand_shape or hand_gesture")
         vowel_options, consonant_options = label2phone(hand_position, hand_gesture)
 
         for vowel in vowel_options:

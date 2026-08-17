@@ -33,7 +33,7 @@ class CTCPrefixScorer_free(BatchPartialScorerInterface):
         Returns: initial state
 
         """
-        if hand_matrix:
+        if hand_matrix is not None:
             logp = self.ctc.log_softmax(x.unsqueeze(0),hand_matrix).detach().squeeze(0).cpu().numpy()
 
         else:

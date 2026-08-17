@@ -168,10 +168,20 @@ class CTC_free(torch.nn.Module):
         :return: log softmax applied 3d tensor (B, Tmax, odim)
         :rtype: torch.Tensor
         """
+        logits = self.ctc_lo(hs_pad)
         if hand_matrix is not None:
-            return F.log_softmax(self.ctc_lo(hs_pad) + self.hand_weight * hand_matrix, dim=-1)
-        else:
-            return F.log_softmax(self.ctc_lo(hs_pad), dim=-1)
+            prompt = torch.as_tensor(
+                hand_matrix, dtype=logits.dtype, device=logits.device
+            )
+            if prompt.ndim == 2:
+                prompt = prompt.unsqueeze(0)
+            if prompt.shape != logits.shape:
+                raise ValueError(
+                    "hand prompt must match CTC logits [B, T, V]: "
+                    f"{tuple(prompt.shape)} != {tuple(logits.shape)}"
+                )
+            logits = logits + self.hand_weight * prompt
+        return F.log_softmax(logits, dim=-1)
 
     def argmax(self, hs_pad):
         """argmax of frame activations

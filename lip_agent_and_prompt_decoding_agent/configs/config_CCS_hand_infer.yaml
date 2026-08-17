@@ -11,14 +11,13 @@ hydra:
   output_subdir: null  
   run:  
     dir: .
-exp_dir:
-exp_name:
+exp_dir: ./exp
+exp_name: lip_decoder
 gpus: 1
 slurm_job_id:
-file_path: /home/guanjie/project/Cued-Agent/HS-0001.mp4
-ckpt_path: /home/guanjie/project/Cued-Agent/ckpt/H_multi_lip.ckpt
-pretrained_model_path:
-transfer_frontend:
-transfer_encoder:
+file_path: null
+ckpt_path: null
+pretrained_model_path: null
+transfer_frontend: false
+transfer_encoder: false
 num-nodes: 1
-

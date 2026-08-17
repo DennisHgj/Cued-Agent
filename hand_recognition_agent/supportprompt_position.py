@@ -1,8 +1,6 @@
 import base64
 import os
 
-import openai
-
 position1 = f""" 
 I will now provide several hand-zoom images with corresponding position labels as the position support set to help you have a sufficient reference when making predictions on test images. 
 There are five possible position of hand in cued speech. In this support set, each hand position category contains 8 pictures, which cover all eight possible hand shapes that appear in the same position label. 
@@ -63,6 +61,17 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 
+def image_content(encoded_image):
+    """Build a current Chat Completions image content item."""
+    return {
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:image/jpeg;base64,{encoded_image}",
+            "detail": "low",
+        },
+    }
+
+
 def build_position_support_set(hand_folder_path, set_size=5):
     content_list = []
     for i in range(5):
@@ -100,16 +109,16 @@ def build_position_support_set(hand_folder_path, set_size=5):
         }
         """
 
-        content_list.append(label_list[i * 2])
-        content_list.append({"image": hand_zoom_img, "resize": 512})
-        content_list.append({"image": hand_zoom_img_2, "resize": 512})
-        content_list.append({"image": hand_zoom_img_3, "resize": 512})
-        content_list.append({"image": hand_zoom_img_4, "resize": 512})
-        content_list.append({"image": hand_zoom_img_5, "resize": 512})
-        content_list.append({"image": hand_zoom_img_6, "resize": 512})
-        content_list.append({"image": hand_zoom_img_7, "resize": 512})
-        content_list.append({"image": hand_zoom_img_8, "resize": 512})
-        content_list.append(label_list[i * 2 + 1])
+        content_list.append({"type": "text", "text": label_list[i * 2]})
+        content_list.append(image_content(hand_zoom_img))
+        content_list.append(image_content(hand_zoom_img_2))
+        content_list.append(image_content(hand_zoom_img_3))
+        content_list.append(image_content(hand_zoom_img_4))
+        content_list.append(image_content(hand_zoom_img_5))
+        content_list.append(image_content(hand_zoom_img_6))
+        content_list.append(image_content(hand_zoom_img_7))
+        content_list.append(image_content(hand_zoom_img_8))
+        content_list.append({"type": "text", "text": label_list[i * 2 + 1]})
     return content_list
 
 

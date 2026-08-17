@@ -51,14 +51,14 @@ class DataModule_CCS(LightningDataModule):
     def __init__(self, cfg=None):
         super().__init__()
         self.cfg = cfg
-        self.cfg.gpus = torch.cuda.device_count()
-        self.total_gpus = self.cfg.gpus * self.cfg.trainer.num_nodes
+        device_count = max(torch.cuda.device_count(), 1)
+        self.total_gpus = device_count * int(self.cfg.trainer.num_nodes)
 
     def _dataloader(self, ds, sampler, collate_fn):
         return torch.utils.data.DataLoader(
             ds,
-            num_workers=12,
-            pin_memory=True,
+            num_workers=int(getattr(self.cfg.data, "num_workers", 4)),
+            pin_memory=torch.cuda.is_available(),
             batch_sampler=sampler,
             collate_fn=collate_fn,
         )
@@ -74,6 +74,7 @@ class DataModule_CCS(LightningDataModule):
             modality=self.cfg.data.modality,
             audio_transform=AudioTransform("train"),
             video_transform=VideoTransform("train"),
+            include_hand=bool(getattr(self.cfg.data, "include_hand", False)),
         )
         sampler = ByFrameCountSampler(train_ds, self.cfg.data.max_frames)
         if self.total_gpus > 1:
@@ -91,6 +92,7 @@ class DataModule_CCS(LightningDataModule):
             modality=self.cfg.data.modality,
             audio_transform=AudioTransform("val"),
             video_transform=VideoTransform("val"),
+            include_hand=bool(getattr(self.cfg.data, "include_hand", False)),
         )
         sampler = ByFrameCountSampler(
             val_ds, self.cfg.data.max_frames_val, shuffle=False
@@ -110,6 +112,7 @@ class DataModule_CCS(LightningDataModule):
                 "test", snr_target=self.cfg.decode.snr_target
             ),
             video_transform=VideoTransform("test"),
+            include_hand=bool(getattr(self.cfg.data, "include_hand", False)),
         )
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=None)
         return dataloader

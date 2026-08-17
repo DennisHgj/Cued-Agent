@@ -1,311 +1,143 @@
-# Cued-Agent: A Multi-Agent Framework for Automatic Cued Speech Recognition
+# Cued-Agent
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
-[![arXiv](https://img.shields.io/badge/arXiv-2508.00391-b31b1b.svg)](https://arxiv.org/abs/2508.00391)
+Cued-Agent is the multi-agent Mandarin Automatic Cued Speech Recognition system
+described in the ACM Multimedia 2025 paper. It converts a Cued Speech video into
+a phoneme sequence and, optionally, a natural Mandarin sentence.
 
-**The first multi-agent system for automatic Cued Speech recognition, integrating visual lip reading, hand cue recognition, and self-correction mechanisms.**
+![Cued-Agent framework](framework.png)
 
----
+## What is trained
 
-## 📋 Table of Contents
+The code now follows the paper's training boundary explicitly:
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Key Features](#key-features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Module Descriptions](#module-descriptions)
-- [Code Status](#code-status)
-- [Citation](#citation)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+| Component | Training in this repository | Input used for training |
+| --- | --- | --- |
+| Lip visual encoder | Yes | Lip ROI frames |
+| CTC head + attention decoder | Yes, jointly with the lip encoder | Phoneme labels |
+| MLLM Hand Recognition Agent | No | Prompting + visual support set |
+| Hand Prompt Decoding Agent | No additional training or parameters | Adds `4.5 * H` to CTC logits during inference |
+| Self-Correction P2W Agent | No | LLM prompting |
 
----
+In other words, “decoder training” means the attention decoder and CTC head are
+trained with the lip model. The later hand-prompt fusion step reuses that trained
+decoder and is parameter-free.
 
-## 🎯 Overview
+## Repository layout
 
-**Cued Speech** is a visual communication system that use hand cues (hand shapes and positions) to assist lip readings for hearing-impairs. This repository presents **Cued-Agent**, a novel multi-agent system that tackles the challenging problem of automatic Cued Speech recognition.
-
-
-### The Challenge
-
-Automatic Cued Speech Recognition (ACSR) is significantly more challenging than traditional lip reading because:
-1. Hand cues are small, fast-moving, and often occluded
-2. Precise temporal alignment between lip movements and hand cues is critical
-3. Limited training data especially for hand cue recognition
-4. Complex multi-modal fusion requirements
-
----
-
-## 🏗️ Architecture
-
-### System Overview
-
-**[Framework Diagram Placeholder]**
-
+```text
+cued_agent/                              maintained inference package
+hand_recognition_agent/                  OpenAI vision prompt + support set
+lip_agent_and_prompt_decoding_agent/     lip/decoder model, training, ESPnet code
+self-p2w-agent/                          legacy experiment scripts
+util/                                    ROI preprocessing helpers
+tests/                                   repository-owned unit and CLI tests
+run_inference.py                         single-video CLI
+batch_inference.py                       batch CLI
+Inference.py                             backward-compatible import
 ```
 
+## Installation
+
+Python 3.10 or 3.11 and an NVIDIA GPU are recommended for the full model.
+
+```bash
+python -m venv .venv
+# Linux/macOS: source .venv/bin/activate
+# Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-**[Detailed Architecture Diagram Placeholder - To be added]**
+Install the PyTorch build appropriate for your CUDA version if the default pip
+build is not suitable. Copy `.env.example` values into your shell environment;
+the code reads keys from the environment and does not store secrets in source.
 
-### Multi-Agent Pipeline
+The repository does not currently distribute the research dataset or a trained
+checkpoint. See `ckpt/README.md` for the required checkpoint contents.
 
-Our framework consists of four specialized agents:
+## End-to-end inference
 
-1. **Hand Recognition Agent**: Uses methods from STF-ACSR as training-free recognition agent to recognize hand shapes and positions
-2. **Lip Reading Agent**: Employs a Conformer-based encoder for lip feature extraction,only finetuned on lip-reading task
-3. **Joint Decoding Agent**: Fuses lip and hand information in the training-free manner for Cued Speech sequence decoding
-4. **Self-Correction Agent**: Leverages LLM to post-process and correct recognition errors and outputs the final Cued Speech sequence and corresponding sentences
+Full four-stage inference requires `OPENAI_API_KEY` and `DEEPSEEK_API_KEY`:
 
----
+```bash
+python run_inference.py \
+  --video HS-0001.mp4 \
+  --checkpoint ckpt/lip_decoder.ckpt \
+  --output outputs/HS-0001.json
+```
 
+The paper defaults are used automatically: hand prompt weight `4.5`, joint beam
+search CTC weight `0.5`, and beam size `20`.
 
+For reproducible/offline hand decoding, pass previously saved hand labels:
 
-## 🔧 Installation
+```bash
+python run_inference.py \
+  --video HS-0001.mp4 \
+  --checkpoint ckpt/lip_decoder.ckpt \
+  --hand-results path/to/hand_results.json \
+  --no-self-correction
+```
 
-#
+For a pure-lip ablation with no API calls:
 
-## 🚀 Quick Start
+```bash
+python run_inference.py \
+  --video HS-0001.mp4 \
+  --checkpoint ckpt/lip_decoder.ckpt \
+  --lip-only \
+  --no-self-correction
+```
 
-Will be added soon.
+See `README_INFERENCE.md` for stage contracts and output details.
 
-## 📦 Module Descriptions
+## Train the lip encoder and decoder
 
-### 1. Video Preprocessing (`lip_hand_seg_CS_latest.py`)
+The label loader accepts either:
 
-**Status: ✅ Complete**
+- four CSV fields for lip training: `dataset,video,input_length,token_ids`;
+- six fields for hand-prompt evaluation: the four fields above plus
+  `hand_result_json,hand_position_npy`.
 
-Extracts lip and hand ROI regions from input videos:
-- Face detection using MediaPipe or RetinaFace
-- Lip region cropping and normalization
-- Hand region tracking and extraction
-- Output: Lip video tensor + Hand video frames
+Run from the model directory and override the local dataset paths:
 
-**Key Functions:**
-- `extract_lip_roi()`: Extracts mouth region for lip reading
-- `extract_hand_roi()`: Tracks and extracts hand regions
-- `preprocess_video()`: Complete preprocessing pipeline
+```bash
+cd lip_agent_and_prompt_decoding_agent
+python train_lip_agent.py \
+  data.dataset.root_dir=/path/to/dataset \
+  data.dataset.label_dir=labels \
+  data.dataset.train_file=train.csv \
+  data.dataset.val_file=val.csv \
+  pretrained_model_path=/path/to/base_visual_model.pth \
+  exp_dir=../exp \
+  exp_name=lip_decoder
+```
 
-### 2. Hand Recognition Agent (`hand_recognition_agent/`)
+This trains the visual encoder, CTC projection, and attention decoder with joint
+CTC/attention loss. It does not load or train hand-recognition data.
 
-**Status: ✅ Complete**
+## Validation
 
-Uses GPT-4o for hand shape and position recognition:
-- Few-shot learning with support set (40 examples for Mandarin Cued Speech System)
-- Keyframe extraction based on slow-motion detection
-- Prompt engineering for optimal recognition
-- Output: Hand matrix [T, 44] with shape and position labels
+Fast repository-owned tests do not require API keys or model weights:
 
-**Key Components:**
-- `CustomizedPromptTemplate.py`: Prompt templates for GPT-4o
-- `supportprompt_shape.py`: Hand shape classification prompts
-- `supportprompt_position.py`: Hand position classification prompts
-- `support_set/`: 40 annotated images for few-shot learning
+```bash
+python -m unittest discover -s tests -v
+```
 
-### 3. Lip and Hand Joint Decoding Agent (`lip_agent_and_prompt_decoding_agent/`)
+The full sample cannot complete until a compatible fine-tuned checkpoint is
+provided. API-backed stages also require network access and valid credentials.
 
-**Status: ✅ Complete**
-
-Multi-modal fusion and sequence decoding:
-- Conformer encoder for visual speech features
-- Transformer decoder with hand cue integration
-- Beam search with CTC for sequence generation
-- Cross-modal attention mechanisms
-
-**Key Components:**
-- `lightning_CCS_hand_prompt_decoding.py`: Main model architecture
-- `train_lip_agent.py`: Training script for lip reading model
-- `test_CCS_hand_free.py`: Evaluation script
-- `espnet/`: Beam search and decoding utilities
-- `datamodule/`: Data loading and preprocessing
-- `configs/`: Model and training configurations
-
-### 4. Self-Correction P2W Agent (`self-p2w-agent/`)
-
-**Status: ✅ Complete**
-
-LLM-based post-processing for error correction:
-- DeepSeek integration for phoneme correction
-- Linguistic constraint checking
-- Minimal modification strategy
-- Phoneme-to-word conversion
-
-**Key Components:**
-- `PostProcess_deepseek.py`: DeepSeek API integration
-- `CuedseqSamples.py`: Sample generation for few-shot prompting
-
-### 5. Inference Pipeline (`Inference.py`, `run_inference.py`)
-
-**Status: ⚠️ In Progress - Being Refined**
-
-Complete end-to-end inference pipeline integrating all agents.
-
-**Current Status:**
-- ✅ Basic pipeline structure implemented
-- ✅ Agent integration completed
-- ⚠️ Performance optimization in progress
-- ⚠️ Error handling being enhanced
-- ⚠️ Documentation being finalized
-
-**Planned Improvements:**
-- Enhanced keyframe extraction algorithms
-- Better memory management for batch processing
-- More robust error handling
-- Additional output formats
-- Real-time inference optimization
-
-### 6. Utilities (`util/`)
-
-**Status: ✅ Complete**
-
-Helper functions and tools:
-- `hand_decode.py`: Hand cue decoding utilities
-- `mediapipe/`: MediaPipe-based video processing
-- `detector.py`: Face and hand detection
-- `video_process.py`: Video I/O and preprocessing
-
----
-
-## 📊 Code Status
-
-### ✅ Completed Modules
-
-All core modules have been fully implemented and tested:
-
-- **Video Preprocessing Module**: Robust ROI extraction for lips and hands
-- **Hand Recognition Agent**: GPT-4V integration with few-shot learning
-- **Lip Reading Agent**: Pre-trained Conformer models
-- **Joint Decoding Agent**: Multi-modal fusion and beam search
-- **Self-Correction Agent**: DeepSeek-based post-processing
-- **Utility Functions**: Complete support libraries
-
-### ⚠️ In Progress
-
-**Inference Pipeline Refinement:**
-
-The inference code (`Inference.py`, `run_inference.py`, `batch_inference.py`) is functional but undergoing refinement:
-
-- **What Works:**
-  - End-to-end video to text conversion
-  - All four agents properly integrated
-  - Basic error handling and logging
-  - JSON output generation
-
-- **Being Enhanced:**
-  - More comprehensive error handling
-  - Extended documentation and examples
-  - Additional configuration options
-  - Batch processing improvements
-
-**Estimated Completion:** Within 1-2 weeks
-
-### 🔜 Planned Features
-
-- Web-based demo interface
-- Real-time inference support
-- Multi-language support (beyond Mandarin Chinese)
-
----
-
-## 📈 Performance
-
-### Benchmark Results
-
-
-
-
-### Ablation Studies
-
-
-
-Demonstrates the contribution of each agent to the overall system performance.
-
----
-
-## 📖 Citation
-
-If you find this work useful for your research, please cite our paper:
+## Citation
 
 ```bibtex
-@inproceedings{10.1145/3746027.3755423,
-author = {Huang, Guanjie and Tsang, Danny H.K. and Yang, Shan and Lei, Guangzhi and Liu, Li},
-title = {Cued-Agent: A Collaborative Multi-Agent System for Automatic Cued Speech Recognition},
-year = {2025},
-isbn = {9798400720352},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
-url = {https://doi.org/10.1145/3746027.3755423},
-doi = {10.1145/3746027.3755423},
-booktitle = {Proceedings of the 33rd ACM International Conference on Multimedia},
-pages = {8313–8321},
-numpages = {9},
-keywords = {automatic cued speech recognition, multi-agent system, multimodal learning},
-location = {Dublin, Ireland},
-series = {MM '25}
+@inproceedings{huang2025cuedagent,
+  title={Cued-Agent: A Multi-Agent Framework for Automatic Cued Speech Recognition},
+  author={Huang, Guanjie and others},
+  booktitle={Proceedings of the ACM International Conference on Multimedia},
+  year={2025}
 }
 ```
 
-### Related Publications
+## License
 
-**[Additional citations to be added]**
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-We thank the following for their contributions to this project:
-
-
-
-- **Auto-AVSR** for VSR model implementations
-
-### Datasets
-
-This work uses data from:
-- [Dataset names and citations to be added]
-
-### Funding
-
-**[Funding information to be added]**
-
----
-
-## 📧 Contact
-
-For questions, suggestions, or collaboration opportunities, please:
-
-- Open an issue on GitHub
-- Contact the maintainers: [ghuang565@connect.hkust-gz.edu.cn]
-
----
-
-
-## 🗺️ Roadmap
-
-- [x] Core module implementation
-- [x] Hand recognition agent with GPT-4V
-- [x] Lip reading agent training
-- [x] Joint decoding agent
-- [x] Self-correction agent
-- [ ] Inference pipeline optimization (In Progress)
-- [ ] Web demo interface
-- [ ] Real-time inference
-- [ ] Model compression
-- [ ] Multi-language support
-- [ ] Public dataset release
-
----
-
-**Last Updated:** October 31, 2025
-
-**Version:** 1.0.0-beta 
-
+MIT. See `LICENSE`.

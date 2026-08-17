@@ -1,30 +1,55 @@
 import cv2
 import numpy as np
-import dlib
 import os
+from pathlib import Path
 from mediapipe import solutions
 
 # parameter
 lip_box = 140
 hand_box = 320
 
-# lip predictor 
-detector = dlib.get_frontal_face_detector()
-lip_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+# Predictors are initialized lazily so importing the inference package does not
+# depend on the caller's current working directory or allocate MediaPipe state.
+detector = None
+lip_predictor = None
+hand_predictor = None
+_PROJECT_ROOT = Path(__file__).resolve().parent
 
-# hand predictor
-hand_predictor = solutions.hands.Hands()
+
+def _get_lip_models():
+    global detector, lip_predictor
+    if detector is None or lip_predictor is None:
+        try:
+            import dlib
+        except ImportError as exc:
+            raise RuntimeError(
+                "dlib is required only for the legacy dataset segmentation path"
+            ) from exc
+        predictor_path = _PROJECT_ROOT / "shape_predictor_68_face_landmarks.dat"
+        if not predictor_path.is_file():
+            raise FileNotFoundError(f"Face landmark predictor not found: {predictor_path}")
+        detector = dlib.get_frontal_face_detector()
+        lip_predictor = dlib.shape_predictor(str(predictor_path))
+    return detector, lip_predictor
+
+
+def _get_hand_predictor():
+    global hand_predictor
+    if hand_predictor is None:
+        hand_predictor = solutions.hands.Hands()
+    return hand_predictor
 
 
 def get_lip_margin(frame_copy):
     frameGray = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2GRAY)
-    faces = detector(frameGray)
+    face_detector, predictor = _get_lip_models()
+    faces = face_detector(frameGray)
 
     for face in faces:
         x1, y1 = face.left(), face.top()
         x2, y2 = face.right(), face.bottom()
         # imgOriginal = cv2.rectangle(img, (x1,y1),(x2,y2),(0,255,0),2)
-        landmarks = lip_predictor(frameGray, face)
+        landmarks = predictor(frameGray, face)
         myPoints = []
         for n in range(68):
             x = landmarks.part(n).x
@@ -39,7 +64,7 @@ def get_lip_margin(frame_copy):
 
 def get_hand_margin(frame_copy):
     frameRGB = cv2.cvtColor(frame_copy, cv2.COLOR_BGR2RGB)
-    results = hand_predictor.process(frameRGB)
+    results = _get_hand_predictor().process(frameRGB)
 
     if results.multi_hand_landmarks:
         landmark_list = []
@@ -268,7 +293,9 @@ def single_video_segment(video_path):
     hand_positions = []
     frame_indices = []
 
-    frame_idx = 0
+    # Original-video indices are zero based. The previous implementation used
+    # one-based indices, which shifted every hand prompt by one frame.
+    frame_idx = -1
 
     while True:
         success, frame = videoCapture.read()
@@ -330,20 +357,28 @@ def single_video_segment(video_path):
             videoCapture.release()
             break
 
-    return hand_frames, np.array(hand_positions), np.array(frame_indices)
+    if hand_frames:
+        hand_frame_array = np.stack(hand_frames)
+    else:
+        hand_frame_array = np.empty((0, hand_box, hand_box, 3), dtype=np.uint8)
+    return (
+        hand_frame_array,
+        np.asarray(hand_positions, dtype=np.float32).reshape(-1, 2),
+        np.asarray(frame_indices, dtype=np.int64),
+    )
 
 
 
 
 if __name__ == '__main__':
-    data_path = '/data/guanjie/CuedSpeech/CCS_origanl_video/'
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--data-path', required=True)
     parser.add_argument('-p', '--person', type=str, default='M001')
     args = parser.parse_args()
     persons = args.person.split(',')
-    segment(data_path, persons)
+    segment(args.data_path, persons)
 
 
 # test(data_path)
