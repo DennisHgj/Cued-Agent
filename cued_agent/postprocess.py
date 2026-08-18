@@ -31,7 +31,8 @@ def _parse_json_object(content: str) -> dict[str, Any]:
     if "```" in text:
         blocks = text.split("```")
         for block in blocks:
-            candidate = block.removeprefix("json").strip()
+            candidate = block[4:] if block.startswith("json") else block
+            candidate = candidate.strip()
             if candidate.startswith("{") and candidate.endswith("}"):
                 text = candidate
                 break

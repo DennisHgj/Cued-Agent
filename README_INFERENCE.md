@@ -27,6 +27,11 @@ disabled explicitly.
 
 The checked-in `ckpt/` directory does not contain a trained model.
 
+The maintainer release check uses the original `auto_avsr` environment and a
+private research checkpoint. The isolated training server cannot call external
+LLM APIs, so live hand recognition and P2W must be verified on a networked host;
+offline hand-result fusion is covered on the server.
+
 ## Commands
 
 ```bash

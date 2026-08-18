@@ -63,6 +63,17 @@ class DataModule_CCS(LightningDataModule):
             collate_fn=collate_fn,
         )
 
+    def _audio_transform(self, subset):
+        # Lip-only training must not initialize audio augmentation or require
+        # the optional babble-noise asset.
+        if self.cfg.data.modality == "video":
+            return None
+        if subset == "test":
+            return AudioTransform(
+                "test", snr_target=self.cfg.decode.snr_target
+            )
+        return AudioTransform(subset)
+
     def train_dataloader(self):
         ds_args = self.cfg.data.dataset
         train_ds = AVDataset_CCS(
@@ -72,7 +83,7 @@ class DataModule_CCS(LightningDataModule):
             ),
             subset="train",
             modality=self.cfg.data.modality,
-            audio_transform=AudioTransform("train"),
+            audio_transform=self._audio_transform("train"),
             video_transform=VideoTransform("train"),
             include_hand=bool(getattr(self.cfg.data, "include_hand", False)),
         )
@@ -90,7 +101,7 @@ class DataModule_CCS(LightningDataModule):
             label_path=os.path.join(ds_args.root_dir, ds_args.label_dir, ds_args.val_file),
             subset="val",
             modality=self.cfg.data.modality,
-            audio_transform=AudioTransform("val"),
+            audio_transform=self._audio_transform("val"),
             video_transform=VideoTransform("val"),
             include_hand=bool(getattr(self.cfg.data, "include_hand", False)),
         )
@@ -108,9 +119,7 @@ class DataModule_CCS(LightningDataModule):
             label_path=os.path.join(ds_args.root_dir, ds_args.label_dir, ds_args.test_file),
             subset="test",
             modality=self.cfg.data.modality,
-            audio_transform=AudioTransform(
-                "test", snr_target=self.cfg.decode.snr_target
-            ),
+            audio_transform=self._audio_transform("test"),
             video_transform=VideoTransform("test"),
             include_hand=bool(getattr(self.cfg.data, "include_hand", False)),
         )

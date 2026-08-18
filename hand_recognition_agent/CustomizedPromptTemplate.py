@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from pydantic import BaseModel
 
@@ -25,7 +25,9 @@ class Frame(BaseModel):
 
 
 class HandRecognition(BaseModel):
-    recog_results: list[Frame]
+    # ``typing.List`` keeps Pydantic's runtime annotation evaluation compatible
+    # with the original Python 3.8 ``auto_avsr`` research environment.
+    recog_results: List[Frame]
 
 
 BACKGROUND_PROMPT = """You are a Mandarin Cued Speech specialist. Classify the

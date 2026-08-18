@@ -38,7 +38,13 @@ Inference.py                             backward-compatible import
 
 ## Installation
 
-Python 3.10 or 3.11 and an NVIDIA GPU are recommended for the full model.
+Python 3.8-3.11 and an NVIDIA GPU are supported for inference. The original
+server environment (`auto_avsr`, Python 3.8) is part of the release validation;
+Python 3.10 or 3.11 is recommended when creating a new environment.
+
+The training entry point translates trainer defaults between PyTorch Lightning
+1.5 and 2.x, so the original `auto_avsr` environment and newly created
+environments use the same command.
 
 ```bash
 python -m venv .venv
@@ -124,8 +130,20 @@ Fast repository-owned tests do not require API keys or model weights:
 python -m unittest discover -s tests -v
 ```
 
-The full sample cannot complete until a compatible fine-tuned checkpoint is
-provided. API-backed stages also require network access and valid credentials.
+Release 1.1.0 was also validated on the original research server with Python
+3.8.20, PyTorch 2.0.1+cu117, PyTorch Lightning 1.5.10, and an RTX A6000:
+
+- all 7 repository tests passed;
+- pure-lip inference completed on `HS-0001.mp4` with the 2.87 GB
+  `H_multi_lip.ckpt`;
+- offline hand-prompt fusion completed with 8 detected slow-motion groups;
+- one real CCS training batch and one validation batch completed after loading
+  762/767 compatible tensors from the base visual checkpoint.
+
+The public repository does not distribute the research checkpoint or dataset,
+so those full checks require separately supplied assets. API-backed stages also
+require network access and valid credentials; they are never replaced with
+fabricated labels.
 
 ## Citation
 

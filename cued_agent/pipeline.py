@@ -215,9 +215,14 @@ class CuedAgentInference:
         lip_video = self.torch.from_numpy(np.asarray(lip_roi)).permute(0, 3, 1, 2)
         lip_video = self.video_transform(lip_video)
 
-        hand_frames, hand_positions, valid_frame_indices = self.single_video_segment(
-            str(path)
-        )
+        if self.use_hand:
+            hand_frames, hand_positions, valid_frame_indices = self.single_video_segment(
+                str(path)
+            )
+        else:
+            hand_frames = np.empty((0,), dtype=np.uint8)
+            hand_positions = np.empty((0, 2), dtype=np.float32)
+            valid_frame_indices = np.empty((0,), dtype=np.int64)
         return lip_video, hand_frames, hand_positions, valid_frame_indices
 
     def _load_hand_results(self) -> list[dict[str, Any]]:
