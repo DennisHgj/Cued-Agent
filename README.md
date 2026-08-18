@@ -1,32 +1,48 @@
-# Cued-Agent
+# Cued-Agent: A Multi-Agent Framework for Automatic Cued Speech Recognition
 
-Cued-Agent is the multi-agent Mandarin Automatic Cued Speech Recognition system
-described in the ACM Multimedia 2025 paper. It converts a Cued Speech video into
-a phoneme sequence and, optionally, a natural Mandarin sentence.
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
+[![arXiv](https://img.shields.io/badge/arXiv-2508.00391-b31b1b.svg)](https://arxiv.org/abs/2508.00391)
+
+Cued-Agent is the first multi-agent system for automatic Cued Speech
+recognition. It integrates visual lip reading, training-free hand cue
+recognition and prompt decoding, and LLM self-correction. The work was accepted
+by ACM Multimedia 2025.
 
 ![Cued-Agent framework](framework.png)
 
-## What is trained
+## Architecture and training boundary
 
-The code now follows the paper's training boundary explicitly:
+The runtime consists of four stages:
 
-| Component | Training in this repository | Input used for training |
+1. The Lip Recognition Agent extracts lip ROIs and encodes visual speech.
+2. The Hand Recognition Agent identifies one hand position and shape per
+   slow-motion group.
+3. The Hand Prompt Decoding Agent aligns hand cues to video frames and adds
+   `4.5 * H` to the CTC scores during joint CTC/attention beam search.
+4. The optional P2W Agent corrects the decoded phonemes and produces pinyin and
+   Mandarin.
+
+Only the lip model and its sequence decoder are trained in this repository:
+
+| Component | Trained here | Training input |
 | --- | --- | --- |
 | Lip visual encoder | Yes | Lip ROI frames |
-| CTC head + attention decoder | Yes, jointly with the lip encoder | Phoneme labels |
-| MLLM Hand Recognition Agent | No | Prompting + visual support set |
-| Hand Prompt Decoding Agent | No additional training or parameters | Adds `4.5 * H` to CTC logits during inference |
+| CTC head and attention decoder | Yes, jointly with the lip encoder | Phoneme labels |
+| MLLM Hand Recognition Agent | No | Prompting and a visual support set |
+| Hand Prompt Decoding Agent | No added parameters | Inference-time CTC prompt |
 | Self-Correction P2W Agent | No | LLM prompting |
 
-In other words, “decoder training” means the attention decoder and CTC head are
-trained with the lip model. The later hand-prompt fusion step reuses that trained
-decoder and is parameter-free.
+“Decoder training” therefore means the attention decoder and CTC projection are
+trained with the lip encoder. Hand prompt fusion reuses the trained model and
+does not require hand labels during training.
 
 ## Repository layout
 
 ```text
 cued_agent/                              maintained inference package
-hand_recognition_agent/                  OpenAI vision prompt + support set
+hand_recognition_agent/                  OpenAI vision prompt and support set
 lip_agent_and_prompt_decoding_agent/     lip/decoder model, training, ESPnet code
 self-p2w-agent/                          legacy experiment scripts
 util/                                    ROI preprocessing helpers
@@ -39,12 +55,12 @@ Inference.py                             backward-compatible import
 ## Installation
 
 Python 3.8-3.11 and an NVIDIA GPU are supported for inference. The original
-server environment (`auto_avsr`, Python 3.8) is part of the release validation;
-Python 3.10 or 3.11 is recommended when creating a new environment.
+server environment (`auto_avsr`, Python 3.8) is part of release validation;
+Python 3.10 or 3.11 is recommended for a new environment.
 
 The training entry point translates trainer defaults between PyTorch Lightning
-1.5 and 2.x, so the original `auto_avsr` environment and newly created
-environments use the same command.
+1.5 and 2.x, so the original environment and newly created environments use the
+same command.
 
 ```bash
 python -m venv .venv
@@ -54,16 +70,17 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Install the PyTorch build appropriate for your CUDA version if the default pip
-build is not suitable. Copy `.env.example` values into your shell environment;
-the code reads keys from the environment and does not store secrets in source.
+Install the PyTorch build appropriate for your CUDA version when the default pip
+build is unsuitable. Copy the variables from `.env.example` into your shell;
+secrets are never stored in source.
 
-The repository does not currently distribute the research dataset or a trained
-checkpoint. See `ckpt/README.md` for the required checkpoint contents.
+The public repository does not distribute the research dataset or a trained
+checkpoint. See `ckpt/README.md` for the checkpoint contract.
 
 ## End-to-end inference
 
-Full four-stage inference requires `OPENAI_API_KEY` and `DEEPSEEK_API_KEY`:
+Full four-stage inference requires `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, and
+a fine-tuned lip/decoder checkpoint:
 
 ```bash
 python run_inference.py \
@@ -72,10 +89,10 @@ python run_inference.py \
   --output outputs/HS-0001.json
 ```
 
-The paper defaults are used automatically: hand prompt weight `4.5`, joint beam
+Paper defaults are used automatically: hand prompt weight `4.5`, joint beam
 search CTC weight `0.5`, and beam size `20`.
 
-For reproducible/offline hand decoding, pass previously saved hand labels:
+Use saved hand labels for reproducible, API-free prompt fusion:
 
 ```bash
 python run_inference.py \
@@ -85,7 +102,7 @@ python run_inference.py \
   --no-self-correction
 ```
 
-For a pure-lip ablation with no API calls:
+Run a pure-lip ablation with no external API calls:
 
 ```bash
 python run_inference.py \
@@ -95,17 +112,14 @@ python run_inference.py \
   --no-self-correction
 ```
 
-See `README_INFERENCE.md` for stage contracts and output details.
+See [README_INFERENCE.md](README_INFERENCE.md) for stage contracts, hand-result
+format, outputs, and common failures.
 
 ## Train the lip encoder and decoder
 
-The label loader accepts either:
-
-- four CSV fields for lip training: `dataset,video,input_length,token_ids`;
-- six fields for hand-prompt evaluation: the four fields above plus
-  `hand_result_json,hand_position_npy`.
-
-Run from the model directory and override the local dataset paths:
+The label loader accepts either four CSV fields for lip training
+(`dataset,video,input_length,token_ids`) or the legacy six-field hand
+evaluation rows. Hand fields are ignored when `include_hand=false`.
 
 ```bash
 cd lip_agent_and_prompt_decoding_agent
@@ -119,43 +133,56 @@ python train_lip_agent.py \
   exp_name=lip_decoder
 ```
 
-This trains the visual encoder, CTC projection, and attention decoder with joint
-CTC/attention loss. It does not load or train hand-recognition data.
+This jointly trains the visual encoder, CTC projection, and attention decoder.
+It does not initialize audio augmentation or load hand-recognition data in
+video-only mode.
 
 ## Validation
 
-Fast repository-owned tests do not require API keys or model weights:
+Fast tests do not require API keys or model weights:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-Release 1.1.0 was also validated on the original research server with Python
-3.8.20, PyTorch 2.0.1+cu117, PyTorch Lightning 1.5.10, and an RTX A6000:
+Release 1.1.0 was validated on the original research server with Python 3.8.20,
+PyTorch 2.0.1+cu117, PyTorch Lightning 1.5.10, and an RTX A6000:
 
-- all 7 repository tests passed;
+- all 7 repository tests and Python 3.8 compilation passed;
 - pure-lip inference completed on `HS-0001.mp4` with the 2.87 GB
   `H_multi_lip.ckpt`;
 - offline hand-prompt fusion completed with 8 detected slow-motion groups;
 - one real CCS training batch and one validation batch completed after loading
   762/767 compatible tensors from the base visual checkpoint.
 
-The public repository does not distribute the research checkpoint or dataset,
-so those full checks require separately supplied assets. API-backed stages also
-require network access and valid credentials; they are never replaced with
-fabricated labels.
+The isolated training server cannot call external LLM APIs. Live hand
+recognition and P2W therefore require a networked host; failures are surfaced
+rather than replaced with fabricated labels.
+
+## Results
+
+![Comparative results](comparative.png)
+
+![Ablation results](ablation.png)
 
 ## Citation
 
 ```bibtex
-@inproceedings{huang2025cuedagent,
-  title={Cued-Agent: A Multi-Agent Framework for Automatic Cued Speech Recognition},
-  author={Huang, Guanjie and others},
-  booktitle={Proceedings of the ACM International Conference on Multimedia},
-  year={2025}
+@inproceedings{10.1145/3746027.3755423,
+  author = {Huang, Guanjie and Tsang, Danny H.K. and Yang, Shan and Lei, Guangzhi and Liu, Li},
+  title = {Cued-Agent: A Collaborative Multi-Agent System for Automatic Cued Speech Recognition},
+  year = {2025},
+  publisher = {Association for Computing Machinery},
+  url = {https://doi.org/10.1145/3746027.3755423},
+  doi = {10.1145/3746027.3755423},
+  booktitle = {Proceedings of the 33rd ACM International Conference on Multimedia},
+  pages = {8313--8321},
+  location = {Dublin, Ireland},
+  series = {MM '25}
 }
 ```
 
-## License
+## License and contact
 
-MIT. See `LICENSE`.
+This project is licensed under the [MIT License](LICENSE). Open a GitHub issue
+or contact `ghuang565@connect.hkust-gz.edu.cn` for questions and collaboration.
