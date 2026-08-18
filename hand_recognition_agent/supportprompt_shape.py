@@ -109,18 +109,18 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 
-def image_content(encoded_image):
+def image_content(encoded_image, detail="high"):
     """Build a current Chat Completions image content item."""
     return {
         "type": "image_url",
         "image_url": {
             "url": f"data:image/jpeg;base64,{encoded_image}",
-            "detail": "low",
+            "detail": detail,
         },
     }
 
 
-def build_shape_support_set(hand_folder_path,set_size=5):
+def build_shape_support_set(hand_folder_path, set_size=5, detail="high"):
     content_list = []
     for i in range(8):
         index = i * set_size
@@ -138,25 +138,11 @@ def build_shape_support_set(hand_folder_path,set_size=5):
         hand_zoom_img_5 = encode_image(hand_path_5)
 
 
-        """
-        sample_text = {
-            "type": "text",
-            "text": label_list[i],
-        }
-        sample_image = {
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{current_img}"},
-            "detail": "low"
-        }
-        """
-
         content_list.append({"type": "text", "text": label_list[i * 2]})
-        content_list.append(image_content(hand_zoom_img))
-        content_list.append(image_content(hand_zoom_img_2))
-        content_list.append(image_content(hand_zoom_img_3))
-        content_list.append(image_content(hand_zoom_img_4))
-        content_list.append(image_content(hand_zoom_img_5))
+        content_list.append(image_content(hand_zoom_img, detail))
+        content_list.append(image_content(hand_zoom_img_2, detail))
+        content_list.append(image_content(hand_zoom_img_3, detail))
+        content_list.append(image_content(hand_zoom_img_4, detail))
+        content_list.append(image_content(hand_zoom_img_5, detail))
         content_list.append({"type": "text", "text": label_list[i * 2 + 1]})
     return content_list
-
-

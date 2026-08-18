@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import os
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Literal
 
 from pydantic import BaseModel
 
@@ -19,8 +19,8 @@ except ImportError:  # Allow direct execution from this directory.
 
 class Frame(BaseModel):
     frame_id: int
-    hand_position: int
-    hand_shape: int
+    hand_position: Literal[0, 1, 2, 3, 4]
+    hand_shape: Literal[0, 1, 2, 3, 4, 5, 6, 7]
     reasoning_process: str
 
 
@@ -44,14 +44,33 @@ def _text(value: str) -> dict[str, str]:
     return {"type": "text", "text": value}
 
 
-def _image(encoded_image: str) -> dict[str, Any]:
+def _image(encoded_image: str, detail: str) -> dict[str, Any]:
     return {
         "type": "image_url",
         "image_url": {
             "url": f"data:image/jpeg;base64,{encoded_image}",
-            "detail": "low",
+            "detail": detail,
         },
     }
+
+
+def _structured_completion_parser(client: Any) -> Any:
+    """Return the stable parser, with compatibility for OpenAI SDK 1.x."""
+    parser = getattr(client.chat.completions, "parse", None)
+    if parser is not None:
+        return parser
+
+    beta = getattr(client, "beta", None)
+    beta_chat = getattr(beta, "chat", None)
+    beta_completions = getattr(beta_chat, "completions", None)
+    parser = getattr(beta_completions, "parse", None)
+    if parser is None:
+        raise RuntimeError(
+            "The installed openai package does not support structured parsing; "
+            "upgrade openai to a version that provides chat.completions.parse "
+            "or beta.chat.completions.parse"
+        )
+    return parser
 
 
 def generate_recognition_single(
@@ -61,6 +80,7 @@ def generate_recognition_single(
     *,
     api_key: str | None = None,
     model: str | None = None,
+    image_detail: str | None = None,
     client: Any | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Recognize all keyframes using image content items and structured output."""
@@ -69,6 +89,12 @@ def generate_recognition_single(
     support_path = Path(support_set_path).expanduser().resolve()
     if not support_path.is_dir():
         raise FileNotFoundError(f"Hand support set not found: {support_path}")
+
+    detail = image_detail or os.getenv("OPENAI_IMAGE_DETAIL", "high")
+    if detail not in {"low", "high", "auto", "original"}:
+        raise ValueError(
+            "OPENAI_IMAGE_DETAIL must be one of: low, high, auto, original"
+        )
 
     if client is None:
         key = api_key or os.getenv("OPENAI_API_KEY")
@@ -84,15 +110,16 @@ def generate_recognition_single(
         client = OpenAI(api_key=key)
 
     content: list[dict[str, Any]] = [_text(BACKGROUND_PROMPT)]
-    content.extend(build_position_support_set(str(support_path)))
-    content.extend(build_shape_support_set(str(support_path)))
+    content.extend(build_position_support_set(str(support_path), detail=detail))
+    content.extend(build_shape_support_set(str(support_path), detail=detail))
     content.append(_text("Now classify these test keyframes in order:"))
     for frame_id, encoded_frame in enumerate(hand_frames):
         content.append(_text(f"Test keyframe {frame_id}"))
-        content.append(_image(encoded_frame))
+        content.append(_image(encoded_frame, detail))
 
-    completion = client.chat.completions.parse(
-        model=model or os.getenv("OPENAI_HAND_MODEL", "gpt-4o-2024-08-06"),
+    parse_completion = _structured_completion_parser(client)
+    completion = parse_completion(
+        model=model or os.getenv("OPENAI_HAND_MODEL", "gpt-4.1"),
         seed=seed,
         messages=[
             {
@@ -113,6 +140,13 @@ def generate_recognition_single(
         raise ValueError(
             "Hand recognition result count does not match keyframe count: "
             f"{len(results)} != {len(hand_frames)}"
+        )
+    frame_ids = [item["frame_id"] for item in results]
+    expected_frame_ids = list(range(len(hand_frames)))
+    if frame_ids != expected_frame_ids:
+        raise ValueError(
+            "Hand recognition frame IDs must match the input order: "
+            f"{frame_ids} != {expected_frame_ids}"
         )
     usage = getattr(completion, "usage", None)
     return results, int(getattr(usage, "total_tokens", 0) or 0)

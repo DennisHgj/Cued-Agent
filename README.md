@@ -92,6 +92,13 @@ python run_inference.py \
 Paper defaults are used automatically: hand prompt weight `4.5`, joint beam
 search CTC weight `0.5`, and beam size `20`.
 
+Current API defaults use `gpt-4.1` with high-detail image inputs for hand
+recognition and `deepseek-v4-pro` with JSON Output for P2W. Override
+`OPENAI_HAND_MODEL`, `OPENAI_IMAGE_DETAIL`, `DEEPSEEK_MODEL`, or
+`DEEPSEEK_MAX_TOKENS` when a different provider model is required. For a
+paper-era comparison, `OPENAI_HAND_MODEL=gpt-4o-2024-08-06` can be selected only
+while that deprecated snapshot remains available to the account.
+
 Use saved hand labels for reproducible, API-free prompt fusion:
 
 ```bash
@@ -148,7 +155,8 @@ python -m unittest discover -s tests -v
 Release 1.1.0 was validated on the original research server with Python 3.8.20,
 PyTorch 2.0.1+cu117, PyTorch Lightning 1.5.10, and an RTX A6000:
 
-- all 7 repository tests and Python 3.8 compilation passed;
+- all 18 repository tests and Python 3.8 compilation passed, including raw
+  OpenAI 1.88 SDK request/response contracts against in-memory HTTP transports;
 - pure-lip inference completed on `HS-0001.mp4` with the 2.87 GB
   `H_multi_lip.ckpt`;
 - offline hand-prompt fusion completed with 8 detected slow-motion groups;

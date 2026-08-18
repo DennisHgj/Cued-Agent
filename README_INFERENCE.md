@@ -25,6 +25,23 @@ disabled explicitly.
 - `hand_recognition_agent/support_set/` for live hand recognition;
 - API keys in environment variables for live API stages.
 
+The default live API contract is:
+
+- `OPENAI_HAND_MODEL=gpt-4.1` and `OPENAI_IMAGE_DETAIL=high` for fine-grained
+  hand-shape recognition;
+- `DEEPSEEK_MODEL=deepseek-v4-pro` and `DEEPSEEK_MAX_TOKENS=4096` for P2W;
+- DeepSeek JSON Output is requested explicitly and malformed, empty, or
+  truncated responses fail instead of being silently accepted.
+
+See `.env.example` for all configurable values. The paper-era
+`gpt-4o-2024-08-06` snapshot remains an explicit opt-in only while the provider
+keeps it available.
+
+The hand-recognition client prefers the current
+`client.chat.completions.parse` entry point and falls back to
+`client.beta.chat.completions.parse` for the OpenAI 1.x SDK used by the original
+`auto_avsr` environment.
+
 The checked-in `ckpt/` directory does not contain a trained model.
 
 The maintainer release check uses the original `auto_avsr` environment and a
@@ -91,5 +108,7 @@ disabled, pinyin and Mandarin are empty strings.
 - `OPENAI_API_KEY is required`: use `--lip-only` or `--hand-results`, or export
   the key.
 - `DEEPSEEK_API_KEY is required`: use `--no-self-correction`, or export the key.
+- `P2W API did not finish normally`: retry the request or increase
+  `DEEPSEEK_MAX_TOKENS` when the finish reason is `length`.
 - missing `hydra`, `torch`, or `mediapipe`: install `requirements.txt` in the
   active Python environment.

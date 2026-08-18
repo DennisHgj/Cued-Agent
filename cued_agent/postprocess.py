@@ -12,6 +12,10 @@ Return one JSON object with exactly these string fields:
 Processed_Cued_Speech_Sequence, Pinyin_Sequence, Mandarin_Sequence,
 Reasoning_Process. Preserve the input as much as possible and make only the
 minimum changes needed for valid Cued Speech combinations and fluent Mandarin.
+The Reasoning_Process field must contain a brief correction summary, not hidden
+chain-of-thought. Example JSON shape:
+{"Processed_Cued_Speech_Sequence":"n i - h ao","Pinyin_Sequence":"ni hao",
+"Mandarin_Sequence":"你好","Reasoning_Process":"No phoneme change needed."}
 """
 
 USER_PROMPT = """Cued Speech words are separated by '-' and phonemes inside a
@@ -52,46 +56,81 @@ def self_correct(
     api_key: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    max_tokens: int | None = None,
+    client: Any | None = None,
 ) -> dict[str, str]:
     """Correct a phoneme sequence and convert it to pinyin and Mandarin."""
-    key = api_key or os.getenv("DEEPSEEK_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "DEEPSEEK_API_KEY is required for self-correction. "
-            "Use --no-self-correction to run through phoneme decoding only."
+    if not cued_sequence.strip():
+        raise ValueError("Cued Speech sequence must not be empty")
+
+    if client is None:
+        key = api_key or os.getenv("DEEPSEEK_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "DEEPSEEK_API_KEY is required for self-correction. "
+                "Use --no-self-correction to run through phoneme decoding only."
+            )
+        try:
+            from openai import OpenAI
+        except ImportError as exc:  # pragma: no cover - optional runtime dependency
+            raise RuntimeError("The openai Python package is required for P2W") from exc
+
+        client = OpenAI(
+            api_key=key,
+            base_url=base_url
+            or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         )
 
-    try:
-        from openai import OpenAI
-    except ImportError as exc:  # pragma: no cover - optional runtime dependency
-        raise RuntimeError("The openai Python package is required for P2W") from exc
+    token_limit = max_tokens
+    if token_limit is None:
+        raw_limit = os.getenv("DEEPSEEK_MAX_TOKENS", "4096")
+        try:
+            token_limit = int(raw_limit)
+        except ValueError as exc:
+            raise ValueError("DEEPSEEK_MAX_TOKENS must be a positive integer") from exc
+    if token_limit <= 0:
+        raise ValueError("DEEPSEEK_MAX_TOKENS must be a positive integer")
 
-    client = OpenAI(
-        api_key=key,
-        base_url=base_url or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-    )
     response = client.chat.completions.create(
-        model=model or os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner"),
+        model=model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_PROMPT.format(sequence=cued_sequence)},
         ],
-        temperature=0.2,
+        response_format={"type": "json_object"},
+        max_tokens=token_limit,
     )
-    message = response.choices[0].message
+    if not getattr(response, "choices", None):
+        raise RuntimeError("P2W API returned no completion choices")
+    choice = response.choices[0]
+    finish_reason = getattr(choice, "finish_reason", None)
+    if finish_reason not in {None, "stop"}:
+        raise RuntimeError(f"P2W API did not finish normally: {finish_reason}")
+    message = choice.message
     content = message.content or ""
+    if not content.strip():
+        raise RuntimeError("P2W API returned empty content")
     result = _parse_json_object(content)
 
+    required_fields = (
+        "Processed_Cued_Speech_Sequence",
+        "Pinyin_Sequence",
+        "Mandarin_Sequence",
+        "Reasoning_Process",
+    )
+    missing_fields = [name for name in required_fields if name not in result]
+    if missing_fields:
+        raise ValueError("P2W response missing fields: " + ", ".join(missing_fields))
+    invalid_fields = [name for name in required_fields if not isinstance(result[name], str)]
+    if invalid_fields:
+        raise ValueError("P2W response fields must be strings: " + ", ".join(invalid_fields))
+
     normalized = {
-        "Processed_Cued_Speech_Sequence": str(
-            result.get("Processed_Cued_Speech_Sequence", cued_sequence)
-        ),
-        "Pinyin_Sequence": str(result.get("Pinyin_Sequence", "")),
-        "Mandarin_Sequence": str(result.get("Mandarin_Sequence", "")),
-        "Reasoning_Process": str(
-            result.get(
-                "Reasoning_Process", getattr(message, "reasoning_content", "") or ""
-            )
-        ),
+        "Processed_Cued_Speech_Sequence": result["Processed_Cued_Speech_Sequence"],
+        "Pinyin_Sequence": result["Pinyin_Sequence"],
+        "Mandarin_Sequence": result["Mandarin_Sequence"],
+        "Reasoning_Process": result["Reasoning_Process"]
+        or getattr(message, "reasoning_content", "")
+        or "",
     }
     return normalized
