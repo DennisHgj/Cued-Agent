@@ -4,11 +4,16 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![arXiv](https://img.shields.io/badge/arXiv-2508.00391-b31b1b.svg)](https://arxiv.org/abs/2508.00391)
+[![Homepage](https://img.shields.io/badge/Homepage-Guanjie_Huang-1f425f.svg)](https://dennishgj.github.io/)
 
 Cued-Agent is the first multi-agent system for automatic Cued Speech
 recognition. It integrates visual lip reading, training-free hand cue
 recognition and prompt decoding, and LLM self-correction. The work was accepted
 by ACM Multimedia 2025.
+
+Visit [Guanjie Huang's homepage](https://dennishgj.github.io/) for publications,
+projects, and contact information. See [CHANGELOG.md](CHANGELOG.md) for the
+repository's maintenance and validation history.
 
 ![Cued-Agent framework](framework.png)
 
@@ -47,6 +52,7 @@ lip_agent_and_prompt_decoding_agent/     lip/decoder model, training, ESPnet cod
 self-p2w-agent/                          legacy experiment scripts
 util/                                    ROI preprocessing helpers
 tests/                                   repository-owned unit and CLI tests
+CHANGELOG.md                             repository maintenance history
 run_inference.py                         single-video CLI
 batch_inference.py                       batch CLI
 Inference.py                             backward-compatible import
@@ -192,5 +198,6 @@ rather than replaced with fabricated labels.
 
 ## License and contact
 
-This project is licensed under the [MIT License](LICENSE). Open a GitHub issue
-or contact `ghuang565@connect.hkust-gz.edu.cn` for questions and collaboration.
+This project is licensed under the [MIT License](LICENSE). Open a GitHub issue,
+visit [Guanjie Huang's homepage](https://dennishgj.github.io/), or contact
+`ghuang565@connect.hkust-gz.edu.cn` for questions and collaboration.
