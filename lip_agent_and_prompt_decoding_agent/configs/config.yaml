@@ -15,9 +15,8 @@ exp_dir:
 exp_name:
 gpus: 
 slurm_job_id:
-file_path: /data/guanjie/CuedSpeech/CCS_origanl_video/HS/HS-0004.mp4
-ckpt_path:
-pretrained_model_path: /data/guanjie/vsr_trlrwlrs2lrs3vox2avsp_base.pth
-transfer_frontend:
-transfer_encoder:
-
+file_path: null
+ckpt_path: null
+pretrained_model_path: null
+transfer_frontend: false
+transfer_encoder: false

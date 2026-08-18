@@ -1,0 +1,12 @@
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.env
+outputs/
+inference_result.json
+batch_results/
+ckpt/*.ckpt
+ckpt/*.pth
+!ckpt/.gitkeep

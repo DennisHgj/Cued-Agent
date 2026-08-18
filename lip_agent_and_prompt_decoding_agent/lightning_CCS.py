@@ -10,6 +10,7 @@ from espnet.nets.batch_beam_search import BatchBeamSearch
 from espnet.nets.pytorch_backend.e2e_asr_conformer import E2E
 from espnet.nets.scorers.length_bonus import LengthBonus
 from espnet.nets.scorers.ctc import CTCPrefixScorer
+from checkpoint_utils import load_compatible_weights
 
 
 def compute_word_level_distance(seq1, seq2):
@@ -32,23 +33,13 @@ class ModelModule_CCS(LightningModule):
 
         # -- initialise
         if self.cfg.pretrained_model_path:
-            ckpt = torch.load(self.cfg.pretrained_model_path, map_location=lambda storage, loc: storage)
-            if 'epoch=' not in self.cfg.pretrained_model_path:
-                ckpt.pop('decoder.embed.0.weight')
-                ckpt.pop('decoder.output_layer.weight')
-                ckpt.pop('decoder.output_layer.bias')
-                ckpt.pop('ctc.ctc_lo.weight')
-                ckpt.pop('ctc.ctc_lo.bias')
-
-            if self.cfg.transfer_frontend:
-                tmp_ckpt = {k: v for k, v in ckpt["model_state_dict"].items() if
-                            k.startswith("trunk.") or k.startswith("frontend3D.")}
-                self.model.encoder.frontend.load_state_dict(tmp_ckpt)
-            elif self.cfg.transfer_encoder:
-                tmp_ckpt = {k.replace("encoder.", ""): v for k, v in ckpt.items() if k.startswith("encoder.")}
-                self.model.encoder.load_state_dict(tmp_ckpt, strict=True)
-            else:
-                self.model.load_state_dict(ckpt, strict=False)
+            loaded, total = load_compatible_weights(
+                self.model,
+                self.cfg.pretrained_model_path,
+                transfer_frontend=bool(self.cfg.transfer_frontend),
+                transfer_encoder=bool(self.cfg.transfer_encoder),
+            )
+            print(f"Loaded {loaded}/{total} compatible pretrained tensors")
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
@@ -125,7 +116,7 @@ class ModelModule_CCS(LightningModule):
         return loss
 
     def on_train_epoch_start(self):
-        sampler = self.trainer.train_dataloader.loaders.batch_sampler
+        sampler = getattr(self.trainer.train_dataloader, "batch_sampler", None)
         if hasattr(sampler, "set_epoch"):
             sampler.set_epoch(self.current_epoch)
         return super().on_train_epoch_start()

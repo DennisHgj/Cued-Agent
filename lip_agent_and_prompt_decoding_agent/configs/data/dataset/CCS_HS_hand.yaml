@@ -1,6 +1,6 @@
 defaults:
   - _self_
-root_dir: "/data/guanjie/CuedSpeech/"
+root_dir: null
 label_dir: "CCS_lip/labels"
 train_file: "HS_train_label_hand.csv"
 val_file: "HS_test_label_hand.csv"

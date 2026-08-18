@@ -1,4 +1,3 @@
-from operator import itemgetter
 from typing import Iterator, Optional
 
 import numpy as np
@@ -125,10 +124,8 @@ class DistributedSamplerWrapper(DistributedSampler):
             python iterator
         """
         self.dataset = DatasetFromSampler(self.sampler)
-        indexes_of_indexes = super().__iter__()
-
-        subsampler_indexes = self.dataset
-        return iter(itemgetter(*indexes_of_indexes)(subsampler_indexes))
+        indexes_of_indexes = list(super().__iter__())
+        return iter([self.dataset[index] for index in indexes_of_indexes])
 
     def set_epoch(self, epoch):
         super().set_epoch(epoch)
@@ -146,6 +143,5 @@ class RandomSamplerWrapper(RandomSampler):
             python iterator
         """
         self.dataset = DatasetFromSampler(self.sampler)
-        indexes_of_indexes = super().__iter__()
-        subsampler_indexes = self.dataset
-        return iter(itemgetter(*indexes_of_indexes)(subsampler_indexes))
+        indexes_of_indexes = list(super().__iter__())
+        return iter([self.dataset[index] for index in indexes_of_indexes])
