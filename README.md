@@ -148,7 +148,30 @@ python train_lip_agent.py \
 
 This jointly trains the visual encoder, CTC projection, and attention decoder.
 It does not initialize audio augmentation or load hand-recognition data in
-video-only mode.
+video-only mode. Reproduction runs fail fast unless either
+`pretrained_model_path` or `resume_from_checkpoint` names an existing file.
+The historical base visual checkpoint is expected to load at least 99% of the
+model tensors (762/767 tensors in the validated server run); this permits the
+five task-specific output tensors to be newly initialized while rejecting an
+unrelated checkpoint.
+
+The maintained training path matches the original experiment budget: dynamic
+frame-count batches (`max_frames=2000`, `max_frames_val=1600`), 75 epochs, and
+validation by teacher-forced loss. Do not run hand-prompt beam decoding over the
+validation set after every epoch. Select candidate checkpoints by `loss_val`,
+then run `test_CCS_hand_free.py` after training for the final PER comparison.
+
+Random initialization is reserved for an explicit control experiment:
+
+```bash
+python train_lip_agent.py \
+  data.dataset.root_dir=/path/to/dataset \
+  allow_random_initialization=true \
+  exp_name=lip_decoder_random_control
+```
+
+The opt-in flag prevents a missing pretrained path from silently changing a
+paper reproduction into a from-scratch experiment.
 
 ## Validation
 

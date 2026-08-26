@@ -38,6 +38,9 @@ class ModelModule_CCS(LightningModule):
                 self.cfg.pretrained_model_path,
                 transfer_frontend=bool(self.cfg.transfer_frontend),
                 transfer_encoder=bool(self.cfg.transfer_encoder),
+                minimum_fraction=float(
+                    getattr(self.cfg, "min_pretrained_tensor_fraction", 0.0)
+                ),
             )
             print(f"Loaded {loaded}/{total} compatible pretrained tensors")
 
