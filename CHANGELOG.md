@@ -4,6 +4,19 @@ This file records the maintainer-facing changes made while preparing Cued-Agent
 for reproducible use after the ACM Multimedia 2025 paper release. Earlier
 research snapshots remain available in the Git history.
 
+## 2026-08-26 — Reproduction training contract
+
+- Prevented lip/decoder reproduction training from silently falling back to
+  random initialization when the base VSR checkpoint path is omitted.
+- Added explicit `allow_random_initialization=true` opt-in for from-scratch
+  controls and accepted full-checkpoint resume as the other valid start mode.
+- Required the historical base checkpoint to match at least 99% of model
+  tensors before any weights are loaded; the validated base transfers 762/767.
+- Documented the original dynamic frame budget and moved hand-prompt beam/PER
+  evaluation to post-training checkpoint selection instead of every epoch.
+- Added regression tests for initialization, checkpoint, frame-budget, and
+  compatibility-threshold failures.
+
 ## 2026-08-18 — Documentation and project links
 
 - Added this repository change log.

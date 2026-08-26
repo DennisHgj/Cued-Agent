@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import torch
 
+from training_contract import validate_compatible_fraction
+
 
 def _state_dict(payload):
     if not isinstance(payload, dict):
@@ -27,6 +29,7 @@ def load_compatible_weights(
     *,
     transfer_frontend=False,
     transfer_encoder=False,
+    minimum_fraction=0.0,
 ):
     """Load every name-and-shape compatible tensor and report the transfer size."""
     payload = torch.load(checkpoint_path, map_location="cpu")
@@ -54,5 +57,8 @@ def load_compatible_weights(
         raise ValueError(
             f"No compatible tensors found in checkpoint: {checkpoint_path}"
         )
+    validate_compatible_fraction(
+        len(compatible), len(target_state), minimum_fraction
+    )
     target.load_state_dict(compatible, strict=False)
     return len(compatible), len(target_state)

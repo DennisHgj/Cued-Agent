@@ -16,6 +16,8 @@ hydra:
 exp_dir: ./exp
 exp_name: lip_decoder
 pretrained_model_path: null
+allow_random_initialization: false
+min_pretrained_tensor_fraction: 0.99
 transfer_frontend: false
 transfer_encoder: false
 resume_from_checkpoint: null

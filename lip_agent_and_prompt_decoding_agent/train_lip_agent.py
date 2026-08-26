@@ -13,6 +13,7 @@ from omegaconf import OmegaConf
 
 from datamodule.data_module_CCS import DataModule_CCS
 from lightning_CCS import ModelModule_CCS
+from training_contract import validate_training_contract
 
 
 def _trainer_kwargs(trainer_cfg):
@@ -47,6 +48,8 @@ def main(cfg):
     seed_everything(42, workers=True)
     if not cfg.data.dataset.root_dir:
         raise ValueError("Set data.dataset.root_dir to the local dataset root")
+    initialization = validate_training_contract(cfg)
+    print(f"Training initialization contract: {initialization}")
     experiment_dir = os.path.join(cfg.exp_dir, cfg.exp_name)
     os.makedirs(experiment_dir, exist_ok=True)
 
